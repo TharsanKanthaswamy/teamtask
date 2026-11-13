@@ -1,27 +1,51 @@
 'use client';
 
-import { useState, Suspense } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { api } from '@/lib/api';
 import { GlassCard } from '@/components/ui/glass-card';
-import { Users } from 'lucide-react';
+import { Users, KeyRound, Mail, ArrowLeft, CheckCircle2, Lock, RefreshCw } from 'lucide-react';
+
+type AuthMode = 'LOGIN' | 'FORGOT_REQUEST' | 'FORGOT_VERIFY' | 'FORGOT_SUCCESS';
 
 function LoginForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const urlError = searchParams?.get('error');
 
+  const [mode, setMode] = useState<AuthMode>('LOGIN');
+
+  // Sign-in state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // Forgot password state
+  const [resetEmail, setResetEmail] = useState('');
+  const [otp, setOtp] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetSuccessMsg, setResetSuccessMsg] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  // Cooldown timer for OTP resend
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const interval = setInterval(() => {
+      setResendCooldown((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [resendCooldown]);
+
   const displayError = error || urlError;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setLoading(true);
@@ -39,6 +63,306 @@ function LoginForm() {
     }
   };
 
+  const handleRequestOtp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError('');
+    setResetLoading(true);
+
+    try {
+      const res = await api.auth.forgotPassword(resetEmail);
+      setResetSuccessMsg(res.message);
+      setMode('FORGOT_VERIFY');
+      setResendCooldown(60);
+    } catch (err: any) {
+      setResetError(err.message || 'Failed to send verification code.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || resetLoading) return;
+    setResetError('');
+    setResetLoading(true);
+
+    try {
+      const res = await api.auth.forgotPassword(resetEmail);
+      setResetSuccessMsg(res.message);
+      setResendCooldown(60);
+    } catch (err: any) {
+      setResetError(err.message || 'Failed to resend verification code.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError('');
+
+    if (otp.trim().length !== 6) {
+      setResetError('Please enter a valid 6-digit verification code.');
+      return;
+    }
+
+    if (newPassword.length < 8) {
+      setResetError('New password must be at least 8 characters long.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setResetError('Passwords do not match. Please re-enter.');
+      return;
+    }
+
+    setResetLoading(true);
+
+    try {
+      await api.auth.resetPassword(resetEmail, otp.trim(), newPassword);
+      setMode('FORGOT_SUCCESS');
+    } catch (err: any) {
+      setResetError(err.message || 'Failed to reset password.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
+  // --- VIEW 1: REQUEST OTP ---
+  if (mode === 'FORGOT_REQUEST') {
+    return (
+      <GlassCard variant="elevated" className="overflow-hidden">
+        <div className="p-8 space-y-6">
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => {
+                setResetError('');
+                setMode('LOGIN');
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors mb-2"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Back to Sign in
+            </button>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                <KeyRound className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold tracking-tight">Forgot password?</h2>
+                <p className="text-xs text-muted-foreground">
+                  We'll send a 6-digit verification code to your mail.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <form onSubmit={handleRequestOtp} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="reset-email" className="text-sm font-medium">
+                Registered email address
+              </Label>
+              <Input
+                id="reset-email"
+                type="email"
+                placeholder="name@example.com"
+                value={resetEmail}
+                onChange={(e) => setResetEmail(e.target.value)}
+                required
+                autoFocus
+                className="h-11 rounded-lg bg-background-elevated border-border/50 backdrop-blur-sm transition-all duration-200 focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+              />
+              <p className="text-xs text-muted-foreground">
+                Your account must already be registered with this email to reset your password.
+              </p>
+            </div>
+
+            {resetError && (
+              <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-3.5 backdrop-blur-sm animate-fade-in">
+                <p className="text-xs font-medium text-destructive leading-relaxed">{resetError}</p>
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              disabled={resetLoading}
+              className="button-press h-11 w-full rounded-lg bg-primary text-primary-foreground text-sm font-semibold shadow-ambient transition-all duration-200 hover:bg-primary/90 hover:shadow-ambient-lg disabled:opacity-50"
+            >
+              {resetLoading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Sending verification code...
+                </span>
+              ) : (
+                <span className="flex items-center justify-center gap-2">
+                  <Mail className="h-4 w-4" />
+                  Send Verification Code
+                </span>
+              )}
+            </Button>
+          </form>
+        </div>
+      </GlassCard>
+    );
+  }
+
+  // --- VIEW 2: ENTER OTP & NEW PASSWORD ---
+  if (mode === 'FORGOT_VERIFY') {
+    return (
+      <GlassCard variant="elevated" className="overflow-hidden">
+        <div className="p-8 space-y-6">
+          <div className="space-y-2">
+            <button
+              type="button"
+              onClick={() => {
+                setResetError('');
+                setMode('FORGOT_REQUEST');
+              }}
+              className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors mb-2"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              Change email
+            </button>
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
+                <Lock className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold tracking-tight">Enter Verification Code</h2>
+                <p className="text-xs text-muted-foreground truncate max-w-[280px]">
+                  Sent to <strong className="text-foreground">{resetEmail}</strong>
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {resetSuccessMsg && !resetError && (
+            <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/30 p-3 text-xs text-emerald-600 dark:text-emerald-400">
+              {resetSuccessMsg}
+            </div>
+          )}
+
+          <form onSubmit={handleResetPasswordSubmit} className="space-y-4">
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="otp" className="text-sm font-medium">
+                  6-Digit OTP Code
+                </Label>
+                <button
+                  type="button"
+                  onClick={handleResendOtp}
+                  disabled={resendCooldown > 0 || resetLoading}
+                  className="text-xs font-medium text-primary hover:text-primary/80 disabled:text-muted-foreground transition-colors"
+                >
+                  {resendCooldown > 0 ? `Resend in ${resendCooldown}s` : 'Resend code'}
+                </button>
+              </div>
+              <Input
+                id="otp"
+                type="text"
+                inputMode="numeric"
+                maxLength={6}
+                placeholder="123456"
+                value={otp}
+                onChange={(e) => setOtp(e.target.value.replace(/\D/g, ''))}
+                required
+                autoFocus
+                className="h-12 text-center text-xl font-bold tracking-[0.4em] font-mono rounded-lg bg-background-elevated border-border/50 backdrop-blur-sm transition-all duration-200 focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="new-password" className="text-sm font-medium">
+                New Password
+              </Label>
+              <Input
+                id="new-password"
+                type="password"
+                placeholder="At least 8 characters"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+                minLength={8}
+                className="h-11 rounded-lg bg-background-elevated border-border/50 backdrop-blur-sm transition-all duration-200 focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="confirm-password" className="text-sm font-medium">
+                Confirm New Password
+              </Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                placeholder="Re-enter your new password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                minLength={8}
+                className="h-11 rounded-lg bg-background-elevated border-border/50 backdrop-blur-sm transition-all duration-200 focus:border-primary/50 focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+
+            {resetError && (
+              <div className="rounded-lg bg-destructive/10 border border-destructive/30 p-3.5 backdrop-blur-sm animate-fade-in">
+                <p className="text-xs font-medium text-destructive leading-relaxed">{resetError}</p>
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              disabled={resetLoading}
+              className="button-press h-11 w-full rounded-lg bg-primary text-primary-foreground text-sm font-semibold shadow-ambient transition-all duration-200 hover:bg-primary/90 hover:shadow-ambient-lg disabled:opacity-50"
+            >
+              {resetLoading ? (
+                <span className="flex items-center justify-center gap-2">
+                  <RefreshCw className="h-4 w-4 animate-spin" />
+                  Updating password...
+                </span>
+              ) : (
+                'Set New Password'
+              )}
+            </Button>
+          </form>
+        </div>
+      </GlassCard>
+    );
+  }
+
+  // --- VIEW 3: SUCCESS ---
+  if (mode === 'FORGOT_SUCCESS') {
+    return (
+      <GlassCard variant="elevated" className="overflow-hidden">
+        <div className="p-8 text-center space-y-6 animate-fade-in">
+          <div className="mx-auto h-16 w-16 rounded-2xl bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-400">
+            <CheckCircle2 className="h-8 w-8" />
+          </div>
+
+          <div className="space-y-2">
+            <h2 className="text-2xl font-semibold tracking-tight">Password Reset Complete!</h2>
+            <p className="text-sm text-muted-foreground">
+              Your password has been successfully updated. You can now sign in to TeamTrack with your new password.
+            </p>
+          </div>
+
+          <Button
+            type="button"
+            onClick={() => {
+              setEmail(resetEmail);
+              setPassword('');
+              setError('');
+              setMode('LOGIN');
+            }}
+            className="button-press h-11 w-full rounded-lg bg-primary text-primary-foreground text-sm font-semibold shadow-ambient transition-all duration-200 hover:bg-primary/90 hover:shadow-ambient-lg"
+          >
+            Sign in with New Password
+          </Button>
+        </div>
+      </GlassCard>
+    );
+  }
+
+  // --- VIEW 0: STANDARD LOGIN ---
   return (
     <GlassCard variant="elevated" className="overflow-hidden">
       <div className="p-8 space-y-6">
@@ -51,7 +375,7 @@ function LoginForm() {
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleLoginSubmit} className="space-y-5">
           <div className="space-y-2">
             <Label htmlFor="email" className="text-sm font-medium">
               Email address
@@ -69,9 +393,22 @@ function LoginForm() {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password" className="text-sm font-medium">
-              Password
-            </Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password" className="text-sm font-medium">
+                Password
+              </Label>
+              <button
+                type="button"
+                onClick={() => {
+                  setResetEmail(email);
+                  setResetError('');
+                  setMode('FORGOT_REQUEST');
+                }}
+                className="text-xs font-medium text-primary hover:text-primary/80 transition-colors"
+              >
+                Forgot password?
+              </button>
+            </div>
             <Input
               id="password"
               type="password"

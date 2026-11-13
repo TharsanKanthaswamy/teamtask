@@ -6,7 +6,16 @@ import { AuthService } from './auth.service';
 import { TenantService } from '../tenant/tenant.service';
 import { AuthGuard } from '../common/guards/auth.guard';
 import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.decorator';
-import { loginSchema, type LoginInput } from '@teamtrack/shared';
+import {
+  loginSchema,
+  forgotPasswordSchema,
+  verifyResetOtpSchema,
+  resetPasswordSchema,
+  type LoginInput,
+  type ForgotPasswordInput,
+  type VerifyResetOtpInput,
+  type ResetPasswordInput,
+} from '@teamtrack/shared';
 
 @ApiTags('auth')
 @Controller('auth')
@@ -98,6 +107,41 @@ export class AuthController {
         teams,
       },
     };
+  }
+
+  @Post('forgot-password')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Send password reset verification code (OTP) to user email' })
+  @ApiResponse({ status: 200, description: 'OTP sent if account exists' })
+  @ApiResponse({ status: 404, description: 'Account not found' })
+  async forgotPassword(@Body() body: ForgotPasswordInput, @Req() req: Request) {
+    const validated = forgotPasswordSchema.parse(body);
+    return this.authService.forgotPassword(validated.email, req.ip);
+  }
+
+  @Post('verify-reset-otp')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Verify 6-digit password reset OTP' })
+  @ApiResponse({ status: 200, description: 'OTP is valid' })
+  @ApiResponse({ status: 400, description: 'Invalid or expired OTP' })
+  async verifyResetOtp(@Body() body: VerifyResetOtpInput) {
+    const validated = verifyResetOtpSchema.parse(body);
+    return this.authService.verifyResetOtp(validated.email, validated.otp);
+  }
+
+  @Post('reset-password')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Reset user password using verified OTP' })
+  @ApiResponse({ status: 200, description: 'Password reset successful' })
+  @ApiResponse({ status: 400, description: 'Invalid OTP or password' })
+  async resetPassword(@Body() body: ResetPasswordInput, @Req() req: Request) {
+    const validated = resetPasswordSchema.parse(body);
+    return this.authService.resetPassword(
+      validated.email,
+      validated.otp,
+      validated.newPassword,
+      req.ip,
+    );
   }
 
   @Get('google')

@@ -3,9 +3,10 @@ import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
 import { AuditModule } from '../audit/audit.module';
 import { TenantModule } from '../tenant/tenant.module';
+import { MailModule } from '../mail/mail.module';
 
 @Module({
-  imports: [AuditModule, TenantModule],
+  imports: [AuditModule, TenantModule, MailModule],
   controllers: [AuthController],
   providers: [AuthService],
   exports: [AuthService],

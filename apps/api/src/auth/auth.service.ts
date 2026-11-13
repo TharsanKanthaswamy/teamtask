@@ -1,6 +1,7 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../database/prisma.service';
 import { AuditService } from '../audit/audit.service';
+import { MailService } from '../mail/mail.service';
 import * as argon2 from 'argon2';
 import * as crypto from 'crypto';
 import { LoginResponse } from '@teamtrack/shared';
@@ -12,6 +13,7 @@ export class AuthService {
   constructor(
     private prisma: PrismaService,
     private auditService: AuditService,
+    private mailService: MailService,
   ) {}
 
   async login(email: string, password: string, ipAddress?: string): Promise<LoginResponse> {
@@ -252,5 +254,175 @@ export class AuthService {
       timeCost: 3,
       parallelism: 4,
     });
+  }
+
+  async forgotPassword(email: string, ipAddress?: string): Promise<{ success: boolean; message: string }> {
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // 1. Verify that user account already exists
+    const user = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    if (!user) {
+      throw new NotFoundException(
+        'No account was found with this email address. Please make sure your account is already created before requesting a password reset.',
+      );
+    }
+
+    if (user.status !== 'ACTIVE') {
+      throw new BadRequestException('This account is suspended or inactive. Please contact an administrator.');
+    }
+
+    // 2. Prevent spamming OTP requests (throttle: 60s)
+    const recentToken = await this.prisma.passwordResetToken.findFirst({
+      where: {
+        userId: user.id,
+        usedAt: null,
+        createdAt: { gt: new Date(Date.now() - 60 * 1000) },
+      },
+    });
+
+    if (recentToken) {
+      throw new BadRequestException('A verification code was already sent recently. Please check your inbox or wait 60 seconds before requesting a new code.');
+    }
+
+    // 3. Generate 6-digit cryptographic numeric OTP
+    const otp = crypto.randomInt(100000, 1000000).toString();
+    const otpHash = crypto.createHash('sha256').update(otp).digest('hex');
+
+    // 4. Invalidate any existing unused tokens for this user
+    await this.prisma.passwordResetToken.deleteMany({
+      where: {
+        userId: user.id,
+        usedAt: null,
+      },
+    });
+
+    // 5. Store token with 10-minute validity
+    await this.prisma.passwordResetToken.create({
+      data: {
+        userId: user.id,
+        otpHash,
+        expiresAt: new Date(Date.now() + 10 * 60 * 1000), // 10 minutes
+      },
+    });
+
+    // 6. Send OTP via email
+    await this.mailService.sendPasswordResetOtp(user.email, user.name, otp);
+
+    // 7. Audit log
+    await this.auditService.log({
+      actorId: user.id,
+      action: 'LOGIN',
+      entityType: 'User',
+      entityId: user.id,
+      ipAddress,
+      metadata: { event: 'PASSWORD_RESET_OTP_SENT' },
+    });
+
+    return {
+      success: true,
+      message: 'A 6-digit verification code has been sent to your email address.',
+    };
+  }
+
+  async verifyResetOtp(email: string, otp: string): Promise<{ valid: boolean; message: string }> {
+    const normalizedEmail = email.toLowerCase().trim();
+    const user = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Account not found.');
+    }
+
+    const otpHash = crypto.createHash('sha256').update(otp.trim()).digest('hex');
+
+    const token = await this.prisma.passwordResetToken.findFirst({
+      where: {
+        userId: user.id,
+        otpHash,
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+    });
+
+    if (!token) {
+      throw new BadRequestException('Invalid or expired verification code. Please request a new one.');
+    }
+
+    return {
+      valid: true,
+      message: 'Verification code is valid.',
+    };
+  }
+
+  async resetPassword(
+    email: string,
+    otp: string,
+    newPassword: string,
+    ipAddress?: string,
+  ): Promise<{ success: boolean; message: string }> {
+    const normalizedEmail = email.toLowerCase().trim();
+
+    if (!newPassword || newPassword.length < 8) {
+      throw new BadRequestException('New password must be at least 8 characters long.');
+    }
+
+    const user = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Account not found.');
+    }
+
+    const otpHash = crypto.createHash('sha256').update(otp.trim()).digest('hex');
+
+    const token = await this.prisma.passwordResetToken.findFirst({
+      where: {
+        userId: user.id,
+        otpHash,
+        usedAt: null,
+        expiresAt: { gt: new Date() },
+      },
+    });
+
+    if (!token) {
+      throw new BadRequestException('Invalid or expired verification code.');
+    }
+
+    // Hash new password using Argon2id
+    const passwordHash = await this.hashPassword(newPassword);
+
+    // Update password, mark token as used, and invalidate active sessions for security
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: { passwordHash },
+      }),
+      this.prisma.passwordResetToken.update({
+        where: { id: token.id },
+        data: { usedAt: new Date() },
+      }),
+      this.prisma.session.deleteMany({
+        where: { userId: user.id },
+      }),
+    ]);
+
+    await this.auditService.log({
+      actorId: user.id,
+      action: 'LOGIN',
+      entityType: 'User',
+      entityId: user.id,
+      ipAddress,
+      metadata: { event: 'PASSWORD_RESET_SUCCESS' },
+    });
+
+    return {
+      success: true,
+      message: 'Password has been reset successfully. You can now log in with your new password.',
+    };
   }
 }

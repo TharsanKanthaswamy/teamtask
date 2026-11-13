@@ -47,6 +47,21 @@ export const api = {
         method: 'POST',
       }),
     verify: () => apiRequest('/auth/verify', { method: 'POST' }),
+    forgotPassword: (email: string) =>
+      apiRequest<{ success: boolean; message: string }>('/auth/forgot-password', {
+        method: 'POST',
+        body: JSON.stringify({ email }),
+      }),
+    verifyResetOtp: (email: string, otp: string) =>
+      apiRequest<{ valid: boolean; message: string }>('/auth/verify-reset-otp', {
+        method: 'POST',
+        body: JSON.stringify({ email, otp }),
+      }),
+    resetPassword: (email: string, otp: string, newPassword: string) =>
+      apiRequest<{ success: boolean; message: string }>('/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ email, otp, newPassword }),
+      }),
   },
   teams: {
     list: () => apiRequest('/teams'),
