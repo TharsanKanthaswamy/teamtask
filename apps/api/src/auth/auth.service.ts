@@ -33,6 +33,11 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Verify user has local password set (not Google SSO only)
+    if (!user.passwordHash) {
+      throw new UnauthorizedException('This account uses Google Sign-In. Please sign in with Google.');
+    }
+
     // Verify password using Argon2id
     const isValid = await argon2.verify(user.passwordHash, password);
     if (!isValid) {
@@ -90,6 +95,94 @@ export class AuthService {
       },
       sessionToken,
     };
+  }
+
+  async loginWithGoogle(
+    profile: {
+      email: string;
+      name: string;
+      avatarUrl?: string;
+      googleId: string;
+    },
+    ipAddress?: string,
+  ): Promise<{ sessionToken: string; redirectTo: string }> {
+    let user = await this.prisma.user.findUnique({
+      where: { email: profile.email.toLowerCase() },
+      include: {
+        platformAdmin: true,
+        teamMembers: {
+          where: { status: 'ACTIVE' },
+          include: { team: true },
+        },
+      },
+    });
+
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          name: profile.name,
+          email: profile.email.toLowerCase(),
+          googleId: profile.googleId,
+          avatarUrl: profile.avatarUrl,
+          status: 'ACTIVE',
+        },
+        include: {
+          platformAdmin: true,
+          teamMembers: {
+            where: { status: 'ACTIVE' },
+            include: { team: true },
+          },
+        },
+      });
+    } else {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: {
+          googleId: profile.googleId || user.googleId,
+          avatarUrl: profile.avatarUrl || user.avatarUrl,
+        },
+        include: {
+          platformAdmin: true,
+          teamMembers: {
+            where: { status: 'ACTIVE' },
+            include: { team: true },
+          },
+        },
+      });
+    }
+
+    if (user.status !== 'ACTIVE') {
+      throw new UnauthorizedException('Account is not active');
+    }
+
+    const sessionToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(sessionToken).digest('hex');
+
+    await this.prisma.session.create({
+      data: {
+        userId: user.id,
+        tokenHash,
+        expiresAt: new Date(Date.now() + this.SESSION_MAX_AGE),
+      },
+    });
+
+    await this.auditService.log({
+      actorId: user.id,
+      action: 'LOGIN',
+      entityType: 'Session',
+      entityId: user.id,
+      ipAddress,
+      metadata: { method: 'GOOGLE_OAUTH' },
+    });
+
+    let redirectTo = '/workspace/dashboard';
+    if (user.platformAdmin?.enabled) {
+      redirectTo = '/admin/dashboard';
+    } else if (user.teamMembers.length === 0) {
+      redirectTo = '/workspace/dashboard';
+    }
+
+    return { sessionToken, redirectTo };
   }
 
   async logout(sessionToken: string, userId: string, ipAddress?: string): Promise<void> {
