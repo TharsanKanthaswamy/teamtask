@@ -1,6 +1,49 @@
 -- Enable Row-Level Security on tenant-scoped tables
 -- This migration MUST run after the initial schema is created
 
+-- Create role if not exists
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'teamtrack_app') THEN
+        CREATE ROLE teamtrack_app WITH LOGIN PASSWORD 'app_password_change_in_production';
+    END IF;
+END
+$$;
+
+-- Create helper functions for tenant context
+CREATE OR REPLACE FUNCTION set_tenant_context(tenant_team_id UUID, is_super_admin BOOLEAN DEFAULT FALSE)
+RETURNS VOID AS $$
+BEGIN
+    PERFORM set_config('app.current_team_id', tenant_team_id::TEXT, TRUE);
+    PERFORM set_config('app.is_super_admin', is_super_admin::TEXT, TRUE);
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE OR REPLACE FUNCTION get_current_team_id()
+RETURNS UUID AS $$
+BEGIN
+    RETURN NULLIF(current_setting('app.current_team_id', TRUE), '')::UUID;
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN NULL;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+CREATE OR REPLACE FUNCTION is_super_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+    RETURN COALESCE(current_setting('app.is_super_admin', TRUE)::BOOLEAN, FALSE);
+EXCEPTION
+    WHEN OTHERS THEN
+        RETURN FALSE;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+-- Grant execute permissions on tenant context functions
+GRANT EXECUTE ON FUNCTION set_tenant_context(UUID, BOOLEAN) TO teamtrack_app;
+GRANT EXECUTE ON FUNCTION get_current_team_id() TO teamtrack_app;
+GRANT EXECUTE ON FUNCTION is_super_admin() TO teamtrack_app;
+
 -- Enable RLS on team_members (tenant-scoped)
 ALTER TABLE team_members ENABLE ROW LEVEL SECURITY;
 ALTER TABLE team_members FORCE ROW LEVEL SECURITY;

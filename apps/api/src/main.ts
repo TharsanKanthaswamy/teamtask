@@ -8,13 +8,18 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   // CORS configuration
+  const allowedOrigins: (string | RegExp)[] = [
+    'http://localhost:3005',
+    'http://localhost:3000',
+    'http://localhost:3002',
+    /\.vercel\.app$/,
+  ];
+  if (process.env.APP_URL) {
+    allowedOrigins.push(process.env.APP_URL);
+  }
+
   app.enableCors({
-    origin: [
-      process.env.APP_URL || 'http://localhost:3005',
-      'http://localhost:3005',
-      'http://localhost:3000',
-      'http://localhost:3002',
-    ],
+    origin: allowedOrigins,
     credentials: true,
   });
 
@@ -50,7 +55,7 @@ async function bootstrap() {
 
   app.enableShutdownHooks();
 
-  const port = process.env.API_PORT || 3001;
+  const port = process.env.PORT || process.env.API_PORT || 3001;
   let retries = 5;
   while (retries > 0) {
     try {

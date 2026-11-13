@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: teamtrack-api
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: pnpm install && pnpm --filter @teamtrack/database generate && pnpm --filter @teamtrack/database migrate:deploy && pnpm --filter @teamtrack/api build
+    startCommand: pnpm --filter @teamtrack/api start:prod
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
+        sync: false
+      - key: DIRECT_URL
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: SESSION_MAX_AGE
+        value: "604800000"
+

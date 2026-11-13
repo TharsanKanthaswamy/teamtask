@@ -35,11 +35,12 @@ export class AuthController {
       req.ip,
     );
 
-    // Set HTTP-only cookie
+    // Set HTTP-only cookie (supports cross-domain Vercel frontend to Render backend)
+    const isProd = process.env.NODE_ENV === 'production';
     res.cookie('session', result.sessionToken, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
     });
 
@@ -59,12 +60,17 @@ export class AuthController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const sessionToken = req.cookies?.session;
+    const isProd = process.env.NODE_ENV === 'production';
 
     if (sessionToken) {
       await this.authService.logout(sessionToken, user.userId, req.ip);
     }
 
-    res.clearCookie('session');
+    res.clearCookie('session', {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+    });
 
     return { success: true };
   }
