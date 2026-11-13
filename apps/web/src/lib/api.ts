@@ -114,6 +114,33 @@ export const api = {
       }),
     getUserProfile: (userId: string) =>
       apiRequest(`/platform-admin/users/${userId}/profile`),
+    updateUser: (
+      userId: string,
+      data: { name?: string; email?: string; status?: string },
+    ) =>
+      apiRequest(`/platform-admin/users/${userId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(data),
+      }),
+    setUserRole: (userId: string, role: 'SUPER_ADMIN' | 'MEMBER') =>
+      apiRequest(`/platform-admin/users/${userId}/role`, {
+        method: 'POST',
+        body: JSON.stringify({ role }),
+      }),
+    setUserPassword: (userId: string, newPassword: string) =>
+      apiRequest(`/platform-admin/users/${userId}/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify({ newPassword }),
+      }),
+    assignUserToTeam: (userId: string, teamId: string, role?: string) =>
+      apiRequest(`/platform-admin/users/${userId}/teams`, {
+        method: 'POST',
+        body: JSON.stringify({ teamId, role }),
+      }),
+    removeUserFromTeam: (userId: string, teamId: string) =>
+      apiRequest(`/platform-admin/users/${userId}/teams/${teamId}`, {
+        method: 'DELETE',
+      }),
   },
   projects: {
     create: (teamId: string, data: any) =>

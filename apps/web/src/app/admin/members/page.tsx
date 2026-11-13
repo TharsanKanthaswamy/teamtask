@@ -15,6 +15,7 @@ import {
   Trash2,
   Mail,
   Calendar,
+  Settings,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { GlassCard } from '@/components/ui/glass-card';
@@ -32,6 +33,7 @@ export default function AdminMembersPage() {
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [selectedProfileUser, setSelectedProfileUser] = useState<any | null>(null);
+  const [initialProfileTab, setInitialProfileTab] = useState<'OVERVIEW' | 'MANAGE'>('OVERVIEW');
 
   const [formData, setFormData] = useState({
     name: '',
@@ -88,6 +90,18 @@ export default function AdminMembersPage() {
     onError: (err: any) => {
       alert(err.message || 'Failed to remove user');
       setDeleteConfirmId(null);
+    },
+  });
+
+  const toggleAdminMutation = useMutation({
+    mutationFn: ({ userId, role }: { userId: string; role: 'SUPER_ADMIN' | 'MEMBER' }) =>
+      api.platformAdmin.setUserRole(userId, role),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      queryClient.invalidateQueries({ queryKey: ['member-profile'] });
+    },
+    onError: (err: any) => {
+      alert(err.message || 'Failed to update user role');
     },
   });
 
@@ -349,40 +363,79 @@ export default function AdminMembersPage() {
                         </td>
 
                         <td className="px-6 py-4 whitespace-nowrap text-right text-xs">
-                          {deleteConfirmId === user.id ? (
-                            <div className="inline-flex items-center gap-1.5">
-                              <span className="text-xs text-destructive font-medium">Confirm?</span>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => deleteUserMutation.mutate(user.id)}
-                                disabled={deleteUserMutation.isPending}
-                                className="h-7 px-2 text-xs"
-                              >
-                                {deleteUserMutation.isPending ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  'Yes'
-                                )}
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => setDeleteConfirmId(null)}
-                                className="h-7 px-2 text-xs"
-                              >
-                                No
-                              </Button>
-                            </div>
-                          ) : (
-                            <button
-                              onClick={() => setDeleteConfirmId(user.id)}
-                              className="text-muted-foreground hover:text-destructive p-1 rounded transition-colors"
-                              title="Delete user"
+                          <div className="inline-flex items-center gap-1.5 justify-end">
+                            {/* Superadmin Quick Toggle */}
+                            <Button
+                              size="sm"
+                              variant={isAdmin ? 'outline' : 'ghost'}
+                              onClick={() =>
+                                toggleAdminMutation.mutate({
+                                  userId: user.id,
+                                  role: isAdmin ? 'MEMBER' : 'SUPER_ADMIN',
+                                })
+                              }
+                              disabled={toggleAdminMutation.isPending}
+                              className={`h-7 px-2 text-xs font-semibold gap-1 ${
+                                isAdmin
+                                  ? 'border-primary/40 text-primary hover:bg-primary/10'
+                                  : 'text-muted-foreground hover:text-foreground'
+                              }`}
+                              title={isAdmin ? 'Click to revoke Superadmin role' : 'Click to promote to Superadmin'}
                             >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          )}
+                              <ShieldAlert className="h-3.5 w-3.5" />
+                              <span className="hidden sm:inline">{isAdmin ? 'Admin' : 'Make Admin'}</span>
+                            </Button>
+
+                            {/* Edit / Manage button */}
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => {
+                                setSelectedProfileUser(user);
+                                setInitialProfileTab('MANAGE');
+                              }}
+                              className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+                              title="Superadmin controls & profile settings"
+                            >
+                              <Settings className="h-3.5 w-3.5" />
+                            </Button>
+
+                            {/* Delete User */}
+                            {deleteConfirmId === user.id ? (
+                              <div className="inline-flex items-center gap-1">
+                                <span className="text-[11px] text-destructive font-medium">Delete?</span>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => deleteUserMutation.mutate(user.id)}
+                                  disabled={deleteUserMutation.isPending}
+                                  className="h-7 px-2 text-xs"
+                                >
+                                  {deleteUserMutation.isPending ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                  ) : (
+                                    'Yes'
+                                  )}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setDeleteConfirmId(null)}
+                                  className="h-7 px-1.5 text-xs"
+                                >
+                                  No
+                                </Button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={() => setDeleteConfirmId(user.id)}
+                                className="text-muted-foreground hover:text-destructive p-1 rounded transition-colors"
+                                title="Delete user"
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     );
@@ -543,7 +596,11 @@ export default function AdminMembersPage() {
       {selectedProfileUser && (
         <UserProfileDialog
           isOpen={!!selectedProfileUser}
-          onClose={() => setSelectedProfileUser(null)}
+          onClose={() => {
+            setSelectedProfileUser(null);
+            setInitialProfileTab('OVERVIEW');
+          }}
+          userId={selectedProfileUser.id}
           teamId={selectedProfileUser.teamMembers?.[0]?.teamId || teams[0]?.id || ''}
           memberId={selectedProfileUser.teamMembers?.[0]?.id || selectedProfileUser.id}
           fallbackName={selectedProfileUser.name}
@@ -552,6 +609,7 @@ export default function AdminMembersPage() {
             selectedProfileUser.teamMembers?.[0]?.role ||
             (selectedProfileUser.platformAdmin ? 'SUPER_ADMIN' : 'TEAM_MEMBER')
           }
+          initialTab={initialProfileTab}
         />
       )}
     </div>

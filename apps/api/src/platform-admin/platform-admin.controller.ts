@@ -1,9 +1,10 @@
-import { Controller, Get, Post, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Patch, Delete, Body, Param, Query, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { AuthGuard } from '../common/guards/auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { PlatformAdminService } from './platform-admin.service';
 import { AuditService } from '../audit/audit.service';
+import { CurrentUser, CurrentUserData } from '../common/decorators/current-user.decorator';
 
 @ApiTags('platform-admin')
 @Controller('platform-admin')
@@ -78,5 +79,65 @@ export class PlatformAdminController {
   async getUserProfile(@Param('userId') userId: string) {
     const profile = await this.platformAdminService.getUserProfile(userId);
     return { success: true, data: profile };
+  }
+
+  @Patch('users/:userId')
+  @ApiOperation({ summary: 'Update user profile (Super Admin only)' })
+  @ApiResponse({ status: 200, description: 'User updated successfully' })
+  async updateUser(
+    @Param('userId') userId: string,
+    @Body() body: { name?: string; email?: string; status?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' },
+  ) {
+    const user = await this.platformAdminService.updateUser(userId, body);
+    return { success: true, data: user };
+  }
+
+  @Post('users/:userId/role')
+  @ApiOperation({ summary: 'Set user platform role (Promote to Super Admin or Demote to Member)' })
+  @ApiResponse({ status: 200, description: 'Role updated successfully' })
+  async setUserRole(
+    @Param('userId') userId: string,
+    @Body() body: { role: 'SUPER_ADMIN' | 'MEMBER' },
+    @CurrentUser() adminUser: CurrentUserData,
+  ) {
+    const user = await this.platformAdminService.setUserRole(userId, body.role, adminUser.userId);
+    return { success: true, data: user };
+  }
+
+  @Post('users/:userId/reset-password')
+  @ApiOperation({ summary: 'Directly set user password (Super Admin only)' })
+  @ApiResponse({ status: 200, description: 'Password reset successfully' })
+  async setUserPassword(
+    @Param('userId') userId: string,
+    @Body() body: { newPassword: string },
+  ) {
+    const result = await this.platformAdminService.setUserPassword(userId, body.newPassword);
+    return result;
+  }
+
+  @Post('users/:userId/teams')
+  @ApiOperation({ summary: 'Assign user to a team (Super Admin only)' })
+  @ApiResponse({ status: 201, description: 'User assigned to team' })
+  async assignUserToTeam(
+    @Param('userId') userId: string,
+    @Body() body: { teamId: string; role?: 'TEAM_LEAD' | 'TEAM_MEMBER' },
+  ) {
+    const member = await this.platformAdminService.assignUserToTeam(
+      userId,
+      body.teamId,
+      body.role || 'TEAM_MEMBER',
+    );
+    return { success: true, data: member };
+  }
+
+  @Delete('users/:userId/teams/:teamId')
+  @ApiOperation({ summary: 'Remove user from a team (Super Admin only)' })
+  @ApiResponse({ status: 200, description: 'User removed from team' })
+  async removeUserFromTeam(
+    @Param('userId') userId: string,
+    @Param('teamId') teamId: string,
+  ) {
+    const result = await this.platformAdminService.removeUserFromTeam(userId, teamId);
+    return result;
   }
 }
