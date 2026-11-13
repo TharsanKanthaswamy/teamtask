@@ -1,13 +1,13 @@
 const getBaseApiUrl = () => {
   const envUrl = process.env.NEXT_PUBLIC_API_URL;
-  // Fall back to relative path if empty or set to placeholder so Next.js rewrites handle the proxy
+  // Fall back to relative path in browser or live Render backend if empty or placeholder
   if (!envUrl || envUrl.includes('your-backend-api-url')) {
     if (typeof window !== 'undefined') {
       return '/api/v1';
     }
     return process.env.BACKEND_API_URL
       ? `${process.env.BACKEND_API_URL}/api/v1`
-      : 'http://localhost:3001/api/v1';
+      : 'https://teamtask-c8fm.onrender.com/api/v1';
   }
   return envUrl;
 };

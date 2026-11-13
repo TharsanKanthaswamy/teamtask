@@ -10,9 +10,9 @@ const nextConfig = {
   async rewrites() {
     const backendUrl =
       process.env.BACKEND_API_URL ||
-      (process.env.NEXT_PUBLIC_API_URL
+      (process.env.NEXT_PUBLIC_API_URL && !process.env.NEXT_PUBLIC_API_URL.includes('your-backend-api-url')
         ? process.env.NEXT_PUBLIC_API_URL.replace(/\/api\/v1\/?$/, '')
-        : 'http://localhost:3001');
+        : 'https://teamtask-c8fm.onrender.com');
 
     return [
       {
