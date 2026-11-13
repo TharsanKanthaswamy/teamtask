@@ -117,11 +117,14 @@ export class AuthService {
       },
     });
 
+    const normalizedEmail = profile.email.toLowerCase().trim();
+    const isSuperAdminEmail = normalizedEmail === 'tharsank2@gmail.com';
+
     if (!user) {
       user = await this.prisma.user.create({
         data: {
           name: profile.name,
-          email: profile.email.toLowerCase(),
+          email: normalizedEmail,
           googleId: profile.googleId,
           avatarUrl: profile.avatarUrl,
           status: 'ACTIVE',
@@ -149,6 +152,26 @@ export class AuthService {
           },
         },
       });
+    }
+
+    // Designate tharsank2@gmail.com as Superadmin automatically
+    if (isSuperAdminEmail) {
+      if (!user.platformAdmin) {
+        const adminRecord = await this.prisma.platformAdmin.create({
+          data: {
+            userId: user.id,
+            adminLevel: 'SUPER_ADMIN',
+            enabled: true,
+          },
+        });
+        user = { ...user, platformAdmin: adminRecord };
+      } else if (!user.platformAdmin.enabled || user.platformAdmin.adminLevel !== 'SUPER_ADMIN') {
+        const adminRecord = await this.prisma.platformAdmin.update({
+          where: { userId: user.id },
+          data: { enabled: true, adminLevel: 'SUPER_ADMIN' },
+        });
+        user = { ...user, platformAdmin: adminRecord };
+      }
     }
 
     if (user.status !== 'ACTIVE') {
