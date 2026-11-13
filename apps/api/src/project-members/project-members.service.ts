@@ -16,8 +16,12 @@ export class ProjectMembersService {
 
   async addMember(
     projectId: string,
-    teamMemberId: string,
-    responsibility: string | undefined,
+    params: {
+      teamMemberId?: string;
+      userId?: string;
+      email?: string;
+      responsibility?: string;
+    },
     adderId: string,
   ) {
     // Verify project exists
@@ -29,32 +33,100 @@ export class ProjectMembersService {
       throw new NotFoundException('Project not found');
     }
 
-    // Verify team member exists and belongs to project's team
-    const teamMember = await this.prisma.teamMember.findFirst({
-      where: {
-        id: teamMemberId,
-        teamId: project.teamId,
-        status: 'ACTIVE',
-      },
-      include: { user: true },
-    });
+    let teamMember: any = null;
 
-    if (!teamMember) {
-      throw new BadRequestException(
-        'Team member must be an active member of the project\'s team',
-      );
+    if (params.teamMemberId) {
+      teamMember = await this.prisma.teamMember.findFirst({
+        where: {
+          id: params.teamMemberId,
+          teamId: project.teamId,
+          status: 'ACTIVE',
+        },
+        include: { user: true },
+      });
+
+      if (!teamMember) {
+        throw new BadRequestException(
+          'Team member must be an active member of the project\'s team',
+        );
+      }
+    } else if (params.userId) {
+      const user = await this.prisma.user.findUnique({
+        where: { id: params.userId },
+      });
+
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+
+      teamMember = await this.prisma.teamMember.findUnique({
+        where: {
+          teamId_userId: { teamId: project.teamId, userId: user.id },
+        },
+        include: { user: true },
+      });
+
+      if (!teamMember) {
+        // Automatically add user to team
+        teamMember = await this.prisma.teamMember.create({
+          data: {
+            teamId: project.teamId,
+            userId: user.id,
+            role: 'TEAM_MEMBER',
+            status: 'ACTIVE',
+          },
+          include: { user: true },
+        });
+      }
+    } else if (params.email) {
+      const normalizedEmail = params.email.toLowerCase().trim();
+      let user = await this.prisma.user.findUnique({
+        where: { email: normalizedEmail },
+      });
+
+      if (!user) {
+        // Auto-provision user account with email
+        user = await this.prisma.user.create({
+          data: {
+            name: normalizedEmail.split('@')[0],
+            email: normalizedEmail,
+            status: 'ACTIVE',
+          },
+        });
+      }
+
+      teamMember = await this.prisma.teamMember.findUnique({
+        where: {
+          teamId_userId: { teamId: project.teamId, userId: user.id },
+        },
+        include: { user: true },
+      });
+
+      if (!teamMember) {
+        teamMember = await this.prisma.teamMember.create({
+          data: {
+            teamId: project.teamId,
+            userId: user.id,
+            role: 'TEAM_MEMBER',
+            status: 'ACTIVE',
+          },
+          include: { user: true },
+        });
+      }
+    } else {
+      throw new BadRequestException('Either teamMemberId, userId, or email must be provided');
     }
 
-    // Check if already a member
+    // Check if already a member of this project
     const existing = await this.prisma.projectMember.findFirst({
       where: {
         projectId,
-        teamMemberId,
+        teamMemberId: teamMember.id,
       },
     });
 
     if (existing) {
-      throw new ConflictException('User is already a member of this project');
+      throw new ConflictException(`User (${teamMember.user.email}) is already a member of this project`);
     }
 
     // Add member
@@ -62,8 +134,8 @@ export class ProjectMembersService {
       data: {
         teamId: project.teamId,
         projectId,
-        teamMemberId,
-        responsibility,
+        teamMemberId: teamMember.id,
+        responsibility: params.responsibility,
         status: 'ACTIVE',
       },
       include: {
@@ -82,13 +154,70 @@ export class ProjectMembersService {
       teamId: project.teamId,
       metadata: {
         projectId,
-        teamMemberId,
+        teamMemberId: teamMember.id,
         userName: teamMember.user.name,
-        responsibility,
+        userEmail: teamMember.user.email,
+        responsibility: params.responsibility,
       },
     });
 
     return member;
+  }
+
+  async getAvailableUsers(projectId: string, teamId: string) {
+    // 1. Current project member user IDs
+    const currentMembers = await this.prisma.projectMember.findMany({
+      where: { projectId },
+      include: { teamMember: { select: { userId: true } } },
+    });
+    const projectUserIds = new Set(currentMembers.map((m) => m.teamMember.userId));
+
+    // 2. Team members in this team
+    const teamMembers = await this.prisma.teamMember.findMany({
+      where: { teamId, status: 'ACTIVE' },
+      include: {
+        user: { select: { id: true, name: true, email: true, avatarUrl: true, status: true } },
+      },
+    });
+    const teamUserIds = new Set(teamMembers.map((tm) => tm.userId));
+
+    // 3. All platform users
+    const allUsers = await this.prisma.user.findMany({
+      where: { status: 'ACTIVE' },
+      select: { id: true, name: true, email: true, avatarUrl: true, status: true, platformAdmin: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Available team members (not yet in this project)
+    const availableTeamMembers = teamMembers
+      .filter((tm) => !projectUserIds.has(tm.userId))
+      .map((tm) => ({
+        type: 'TEAM_MEMBER' as const,
+        teamMemberId: tm.id,
+        userId: tm.userId,
+        name: tm.user.name,
+        email: tm.user.email,
+        avatarUrl: tm.user.avatarUrl,
+        role: tm.role,
+      }));
+
+    // Other registered users across the platform (new accounts not yet in this team)
+    const otherUsers = allUsers
+      .filter((u) => !projectUserIds.has(u.id) && !teamUserIds.has(u.id))
+      .map((u) => ({
+        type: 'NEW_USER' as const,
+        userId: u.id,
+        name: u.name,
+        email: u.email,
+        avatarUrl: u.avatarUrl,
+        isAdmin: !!u.platformAdmin?.enabled,
+        role: u.platformAdmin?.enabled ? 'SUPER_ADMIN' : 'REGISTERED_USER',
+      }));
+
+    return {
+      teamMembers: availableTeamMembers,
+      otherUsers: otherUsers,
+    };
   }
 
   async removeMember(

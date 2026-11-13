@@ -1,9 +1,17 @@
-import { IsUUID, IsNotEmpty, IsString, IsOptional, MaxLength } from 'class-validator';
+import { IsUUID, IsString, IsOptional, MaxLength, IsEmail } from 'class-validator';
 
 export class AddProjectMemberDto {
   @IsUUID()
-  @IsNotEmpty()
-  teamMemberId!: string;
+  @IsOptional()
+  teamMemberId?: string;
+
+  @IsUUID()
+  @IsOptional()
+  userId?: string;
+
+  @IsEmail()
+  @IsOptional()
+  email?: string;
 
   @IsString()
   @IsOptional()

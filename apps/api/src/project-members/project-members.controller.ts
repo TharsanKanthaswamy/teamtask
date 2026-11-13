@@ -43,14 +43,37 @@ export class ProjectMembersController {
 
     const member = await this.projectMembersService.addMember(
       projectId,
-      dto.teamMemberId,
-      dto.responsibility,
+      {
+        teamMemberId: dto.teamMemberId,
+        userId: dto.userId,
+        email: dto.email,
+        responsibility: dto.responsibility,
+      },
       user.userId,
     );
 
     return {
       success: true,
       data: member,
+    };
+  }
+
+  @Get('available')
+  async getAvailableUsers(
+    @Param('teamId') teamId: string,
+    @Param('projectId') projectId: string,
+    @CurrentUser() user: any,
+  ) {
+    await this.tenantService.resolveTenantContext(
+      user.userId,
+      teamId,
+      user.isAdmin,
+    );
+
+    const data = await this.projectMembersService.getAvailableUsers(projectId, teamId);
+    return {
+      success: true,
+      data,
     };
   }
 

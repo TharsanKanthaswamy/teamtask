@@ -175,7 +175,15 @@ export const api = {
   projectMembers: {
     list: (teamId: string, projectId: string) =>
       apiRequest(`/teams/${teamId}/projects/${projectId}/members`),
-    add: (teamId: string, projectId: string, data: { teamMemberId: string; responsibility?: string }) =>
+    getAvailable: (teamId: string, projectId: string) =>
+      apiRequest<{ success: boolean; data: { teamMembers: any[]; otherUsers: any[] } }>(
+        `/teams/${teamId}/projects/${projectId}/members/available`,
+      ),
+    add: (
+      teamId: string,
+      projectId: string,
+      data: { teamMemberId?: string; userId?: string; email?: string; responsibility?: string },
+    ) =>
       apiRequest(`/teams/${teamId}/projects/${projectId}/members`, {
         method: 'POST',
         body: JSON.stringify(data),

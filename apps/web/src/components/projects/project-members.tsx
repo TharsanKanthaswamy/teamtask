@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import { Plus, UserX, Mail, Crown } from 'lucide-react';
+import { Plus, UserX, Mail, Crown, Users, AtSign, Loader2, AlertCircle } from 'lucide-react';
 import { api } from '@/lib/api';
 import { GlassCard } from '@/components/ui/glass-card';
 import { Button } from '@/components/ui/button';
@@ -18,23 +18,37 @@ interface ProjectMembersProps {
 
 export function ProjectMembers({ teamId, projectId, members, project, onUpdate }: ProjectMembersProps) {
   const [isAddingMember, setIsAddingMember] = useState(false);
-  const [selectedMemberId, setSelectedMemberId] = useState('');
+  const [addMethod, setAddMethod] = useState<'SELECT' | 'EMAIL'>('SELECT');
+  const [selectedTarget, setSelectedTarget] = useState('');
+  const [emailInput, setEmailInput] = useState('');
   const [responsibility, setResponsibility] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
   const [selectedMemberForProfile, setSelectedMemberForProfile] = useState<any | null>(null);
 
-  const { data: teamMembers } = useQuery<any>({
-    queryKey: ['team-members', teamId],
-    queryFn: () => api.teams.getMembers(teamId),
+  // Fetch both team members and newly account-created users across platform
+  const { data: availableData, isLoading: loadingAvailable, refetch: refetchAvailable } = useQuery<any>({
+    queryKey: ['available-project-members', teamId, projectId],
+    queryFn: () => api.projectMembers.getAvailable(teamId, projectId),
+    enabled: isAddingMember,
   });
 
+  const teamMembersList = availableData?.data?.teamMembers || [];
+  const otherUsersList = availableData?.data?.otherUsers || [];
+
   const addMutation = useMutation({
-    mutationFn: (data: { teamMemberId: string; responsibility?: string }) =>
+    mutationFn: (data: { teamMemberId?: string; userId?: string; email?: string; responsibility?: string }) =>
       api.projectMembers.add(teamId, projectId, data),
     onSuccess: () => {
       onUpdate();
+      refetchAvailable();
       setIsAddingMember(false);
-      setSelectedMemberId('');
+      setSelectedTarget('');
+      setEmailInput('');
       setResponsibility('');
+      setErrorMessage('');
+    },
+    onError: (err: any) => {
+      setErrorMessage(err.message || 'Failed to add member to project');
     },
   });
 
@@ -43,32 +57,60 @@ export function ProjectMembers({ teamId, projectId, members, project, onUpdate }
       api.projectMembers.remove(teamId, projectId, memberId),
     onSuccess: () => {
       onUpdate();
+      refetchAvailable();
     },
   });
 
   const handleAddMember = () => {
-    if (!selectedMemberId) return;
+    setErrorMessage('');
 
-    addMutation.mutate({
-      teamMemberId: selectedMemberId,
-      responsibility: responsibility || undefined,
-    });
+    if (addMethod === 'SELECT') {
+      if (!selectedTarget) {
+        setErrorMessage('Please select a member or user from the list.');
+        return;
+      }
+
+      const [type, id] = selectedTarget.split(':');
+      if (type === 'teamMember') {
+        addMutation.mutate({
+          teamMemberId: id,
+          responsibility: responsibility.trim() || undefined,
+        });
+      } else if (type === 'user') {
+        addMutation.mutate({
+          userId: id,
+          responsibility: responsibility.trim() || undefined,
+        });
+      }
+    } else {
+      if (!emailInput.trim() || !emailInput.includes('@')) {
+        setErrorMessage('Please enter a valid email address.');
+        return;
+      }
+
+      addMutation.mutate({
+        email: emailInput.trim(),
+        responsibility: responsibility.trim() || undefined,
+      });
+    }
   };
-
-  const availableMembers = teamMembers?.data?.filter(
-    (tm: any) => !members.some((m: any) => m.teamMemberId === tm.id)
-  ) || [];
 
   return (
     <div className="space-y-6">
-      {/* Add Member */}
+      {/* Add Member Card */}
       <GlassCard variant="elevated" className="p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">Add Member</h3>
+          <div className="flex items-center gap-2">
+            <Users className="h-5 w-5 text-primary" />
+            <h3 className="text-lg font-semibold">Add Member</h3>
+          </div>
           <Button
             variant="ghost"
             size="sm"
-            onClick={() => setIsAddingMember(!isAddingMember)}
+            onClick={() => {
+              setIsAddingMember(!isAddingMember);
+              setErrorMessage('');
+            }}
             className="button-press gap-2"
           >
             <Plus className="h-4 w-4" />
@@ -77,40 +119,148 @@ export function ProjectMembers({ teamId, projectId, members, project, onUpdate }
         </div>
 
         {isAddingMember && (
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium">Select Team Member</label>
-              <select
-                value={selectedMemberId}
-                onChange={(e) => setSelectedMemberId(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg border border-border bg-background-elevated text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+          <div className="space-y-4 pt-2">
+            {/* Method Toggle Buttons */}
+            <div className="flex items-center gap-2 p-1 rounded-xl bg-muted/40 border border-border w-fit text-xs font-medium">
+              <button
+                type="button"
+                onClick={() => {
+                  setAddMethod('SELECT');
+                  setErrorMessage('');
+                }}
+                className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+                  addMethod === 'SELECT'
+                    ? 'bg-primary text-primary-foreground font-semibold shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
               >
-                <option value="">Choose a member...</option>
-                {availableMembers.map((member: any) => (
-                  <option key={member.id} value={member.id}>
-                    {member.user.name} ({member.role === 'TEAM_LEAD' ? 'Team Lead' : 'Member'})
-                  </option>
-                ))}
-              </select>
+                <Users className="h-3.5 w-3.5" />
+                Select from Registered Users
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddMethod('EMAIL');
+                  setErrorMessage('');
+                }}
+                className={`px-3 py-1.5 rounded-lg flex items-center gap-1.5 transition-all ${
+                  addMethod === 'EMAIL'
+                    ? 'bg-primary text-primary-foreground font-semibold shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground'
+                }`}
+              >
+                <AtSign className="h-3.5 w-3.5" />
+                Add using Mail
+              </button>
             </div>
 
+            {/* Error Feedback */}
+            {errorMessage && (
+              <div className="p-3 rounded-lg bg-destructive/10 border border-destructive/20 text-xs text-destructive flex items-center gap-2 animate-fade-in">
+                <AlertCircle className="h-4 w-4 flex-shrink-0" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
+
+            {/* Field A: Select User Dropdown */}
+            {addMethod === 'SELECT' ? (
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Select Team Member or Registered User</label>
+                {loadingAvailable ? (
+                  <div className="h-10 px-3 rounded-lg border border-border bg-background-elevated flex items-center text-xs text-muted-foreground gap-2">
+                    <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+                    Loading available users...
+                  </div>
+                ) : (
+                  <select
+                    value={selectedTarget}
+                    onChange={(e) => setSelectedTarget(e.target.value)}
+                    className="w-full px-3 py-2.5 rounded-lg border border-border bg-background-elevated text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    <option value="">Choose a member or newly created account...</option>
+
+                    {/* Group 1: Team Members */}
+                    {teamMembersList.length > 0 && (
+                      <optgroup label="Team Members">
+                        {teamMembersList.map((member: any) => (
+                          <option key={member.teamMemberId} value={`teamMember:${member.teamMemberId}`}>
+                            {member.name} ({member.role === 'TEAM_LEAD' ? 'Team Lead' : 'Member'}) — {member.email}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+
+                    {/* Group 2: Other Registered Platform Users (New Accounts) */}
+                    {otherUsersList.length > 0 && (
+                      <optgroup label="Newly Account-Created Users (Add & Join Team)">
+                        {otherUsersList.map((user: any) => (
+                          <option key={user.userId} value={`user:${user.userId}`}>
+                            {user.name} {user.isAdmin ? '★ Superadmin' : '(New User)'} — {user.email}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+
+                    {teamMembersList.length === 0 && otherUsersList.length === 0 && (
+                      <option disabled value="">
+                        All registered users are already in this project
+                      </option>
+                    )}
+                  </select>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  Selecting a newly account-created user will automatically add them to the team and this project.
+                </p>
+              </div>
+            ) : (
+              /* Field B: Add by Mail */
+              <div className="space-y-2">
+                <label className="text-sm font-medium flex items-center gap-1.5">
+                  <Mail className="h-4 w-4 text-primary" />
+                  User Email Address
+                </label>
+                <input
+                  type="email"
+                  value={emailInput}
+                  onChange={(e) => setEmailInput(e.target.value)}
+                  placeholder="e.g., alex@company.com"
+                  className="w-full px-3 py-2.5 rounded-lg border border-border bg-background-elevated text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Enter any user's email address. If they already created an account, they'll be added immediately; otherwise an account will be provisioned for them.
+                </p>
+              </div>
+            )}
+
+            {/* Responsibility Field */}
             <div className="space-y-2">
               <label className="text-sm font-medium">Responsibility (optional)</label>
               <input
                 type="text"
                 value={responsibility}
                 onChange={(e) => setResponsibility(e.target.value)}
-                placeholder="e.g., Frontend Developer"
-                className="w-full px-3 py-2 rounded-lg border border-border bg-background-elevated text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                placeholder="e.g., Frontend Developer, Lead Designer"
+                className="w-full px-3 py-2.5 rounded-lg border border-border bg-background-elevated text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
 
             <Button
               onClick={handleAddMember}
-              disabled={!selectedMemberId || addMutation.isPending}
-              className="button-press w-full"
+              disabled={
+                addMutation.isPending ||
+                (addMethod === 'SELECT' && !selectedTarget) ||
+                (addMethod === 'EMAIL' && !emailInput.trim())
+              }
+              className="button-press w-full font-semibold"
             >
-              {addMutation.isPending ? 'Adding...' : 'Add to Project'}
+              {addMutation.isPending ? (
+                <span className="flex items-center justify-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Adding to Project...
+                </span>
+              ) : (
+                'Add to Project'
+              )}
             </Button>
           </div>
         )}
@@ -189,6 +339,7 @@ export function ProjectMembers({ teamId, projectId, members, project, onUpdate }
           onClose={() => setSelectedMemberForProfile(null)}
           teamId={teamId}
           memberId={selectedMemberForProfile.teamMemberId || selectedMemberForProfile.id}
+          userId={selectedMemberForProfile.teamMember?.user?.id}
           fallbackName={selectedMemberForProfile.teamMember?.user?.name}
           fallbackEmail={selectedMemberForProfile.teamMember?.user?.email}
           fallbackRole={selectedMemberForProfile.teamMember?.role}
