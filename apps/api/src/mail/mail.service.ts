@@ -26,11 +26,14 @@ export class MailService {
           user,
           pass,
         },
+        connectionTimeout: 5000,
+        greetingTimeout: 5000,
+        socketTimeout: 5000,
       });
       this.logger.log(`SMTP Mail Transport configured for host: ${host}:${port} (secure: ${secure})`);
     } else {
       this.logger.warn(
-        'SMTP credentials not fully configured (SMTP_HOST, SMTP_USER, SMTP_PASS). Emails will be logged to console in dev mode.',
+        'SMTP credentials not fully configured (SMTP_HOST, SMTP_USER, SMTP_PASS). Emails will be logged to console in dev mode or sent via HTTPS API (RESEND_API_KEY / BREVO_API_KEY).',
       );
     }
   }
@@ -119,6 +122,70 @@ export class MailService {
 </html>
     `.trim();
 
+    // 1. Try Resend API over HTTPS (Port 443 - never blocked by cloud hosts like Render)
+    const resendApiKey = process.env.RESEND_API_KEY;
+    if (resendApiKey) {
+      try {
+        const res = await fetch('https://api.resend.com/emails', {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${resendApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            from: process.env.MAIL_FROM || process.env.SMTP_FROM || 'TeamTrack <onboarding@resend.dev>',
+            to: [email],
+            subject,
+            text: `Your TeamTrack password reset code is: ${otp}. It expires in 10 minutes.`,
+            html: htmlContent,
+          }),
+        });
+
+        if (res.ok) {
+          this.logger.log(`Password reset OTP email sent successfully via Resend HTTPS API to: ${email}`);
+          return true;
+        } else {
+          const errText = await res.text();
+          this.logger.error(`Resend API failed (${res.status}): ${errText}`);
+        }
+      } catch (err: any) {
+        this.logger.error(`Resend API network error: ${err.message}`);
+      }
+    }
+
+    // 2. Try Brevo API over HTTPS (Port 443 - free 300 emails/day, no domain lock)
+    const brevoApiKey = process.env.BREVO_API_KEY;
+    if (brevoApiKey) {
+      try {
+        const senderEmail = process.env.SMTP_USER || process.env.MAIL_SENDER || 'noreply@teamtrack.app';
+        const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+          method: 'POST',
+          headers: {
+            'api-key': brevoApiKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            sender: { name: 'TeamTrack', email: senderEmail },
+            to: [{ email }],
+            subject,
+            htmlContent,
+            textContent: `Your TeamTrack password reset code is: ${otp}. It expires in 10 minutes.`,
+          }),
+        });
+
+        if (res.ok) {
+          this.logger.log(`Password reset OTP email sent successfully via Brevo HTTPS API to: ${email}`);
+          return true;
+        } else {
+          const errText = await res.text();
+          this.logger.error(`Brevo API failed (${res.status}): ${errText}`);
+        }
+      } catch (err: any) {
+        this.logger.error(`Brevo API network error: ${err.message}`);
+      }
+    }
+
+    // 3. Try standard SMTP transport
     if (this.transporter) {
       try {
         await this.transporter.sendMail({
@@ -128,11 +195,11 @@ export class MailService {
           text: `Your TeamTrack password reset code is: ${otp}. It expires in 10 minutes.`,
           html: htmlContent,
         });
-        this.logger.log(`Password reset OTP email sent successfully to: ${email}`);
+        this.logger.log(`Password reset OTP email sent successfully via SMTP to: ${email}`);
         return true;
       } catch (err: any) {
-        this.logger.error(`Failed to send email to ${email}: ${err.message}`, err.stack);
-        // Fall back to console output so the user/admin is not completely blocked
+        this.logger.error(`Failed to send email to ${email} via SMTP: ${err.message}`);
+        // Render free instances block outbound SMTP ports (25, 465, 587).
         this.logDevOtp(email, otp);
         return false;
       }
@@ -149,7 +216,8 @@ export class MailService {
     console.log(`   Subject: Your TeamTrack Password Reset Code`);
     console.log(`   CODE:    👉  ${otp}  👈`);
     console.log('   Expires: 10 minutes');
-    console.log('   (To send live emails, configure SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS)');
+    console.log('   (Note: Cloud providers like Render block SMTP ports 465/587 on free tier.');
+    console.log('    Use RESEND_API_KEY or BREVO_API_KEY to send via HTTPS Port 443)');
     console.log('============================================================\n');
   }
 }
