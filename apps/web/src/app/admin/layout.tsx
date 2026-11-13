@@ -71,7 +71,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
   const currentUser = authData?.user;
   const userName = currentUser?.name || 'Super Administrator';
-  const userEmail = currentUser?.email || 'admin@teamtrack.local';
+  const userEmail = currentUser?.email || 'tharsank2@gmail.com';
 
   const handleSignOut = async () => {
     try {

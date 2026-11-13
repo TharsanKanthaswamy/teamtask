@@ -43,7 +43,7 @@ async function main() {
   const superAdmin = await prisma.user.create({
     data: {
       name: 'Super Administrator',
-      email: 'admin@teamtrack.local',
+      email: 'tharsank2@gmail.com',
       passwordHash: adminHash,
       status: 'ACTIVE',
     },
@@ -680,7 +680,7 @@ async function main() {
   console.log('🎉 RICH SEED COMPLETED SUCCESSFULLY IN SUPABASE!');
   console.log('======================================================');
   console.log('🔑 SUPER ADMIN:');
-  console.log('   - admin@teamtrack.local / Admin@123  (Platform Admin View)');
+  console.log('   - tharsank2@gmail.com / Admin@123  (Platform Admin View)');
   console.log('\n👥 TEAM ALPHA:');
   console.log('   - alice@teamtrack.local / Password@123  (Team Lead)');
   console.log('   - bob@teamtrack.local   / Password@123  (Member)');

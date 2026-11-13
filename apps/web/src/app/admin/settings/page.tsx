@@ -29,7 +29,7 @@ export default function AdminSettingsPage() {
   const [generalConfig, setGeneralConfig] = useState({
     platformName: 'TeamTrack',
     orgName: 'Acme Enterprise',
-    supportEmail: 'admin@teamtrack.local',
+    supportEmail: 'tharsank2@gmail.com',
     appUrl: 'http://localhost:3005',
     apiUrl: 'http://localhost:3001/api/v1',
   });

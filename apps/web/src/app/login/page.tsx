@@ -194,25 +194,6 @@ export default function LoginPage() {
           <LoginForm />
         </Suspense>
 
-        {/* Development credentials */}
-        <GlassCard variant="subtle" className="mt-6">
-          <div className="p-4 text-center space-y-2">
-            <p className="text-xs font-medium text-muted-foreground">
-              Development Access
-            </p>
-            <div className="space-y-1 text-xs text-muted-foreground tabular-nums">
-              <p>
-                <span className="font-semibold text-foreground">Super Admin:</span>{' '}
-                admin@teamtrack.local / Admin@123
-              </p>
-              <p>
-                <span className="font-semibold text-foreground">Team Lead:</span>{' '}
-                alice@teamtrack.local / Password@123
-              </p>
-            </div>
-          </div>
-        </GlassCard>
-
         {/* Footer */}
         <div className="mt-6 text-center">
           <p className="text-xs text-muted-foreground">
