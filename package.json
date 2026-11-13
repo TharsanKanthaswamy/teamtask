@@ -1,0 +1,27 @@
+{
+  "name": "teamtrack",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Multi-tenant Project Workforce Management Platform",
+  "scripts": {
+    "dev": "concurrently --names \"web,api\" -c \"blue,green\" --restart-tries 3 --restart-after 1000 \"pnpm --filter @teamtrack/web dev\" \"pnpm --filter @teamtrack/api dev\"",
+    "build": "pnpm --filter @teamtrack/web build && pnpm --filter @teamtrack/api build",
+    "db:migrate": "pnpm --filter @teamtrack/database migrate",
+    "db:seed": "pnpm --filter @teamtrack/database seed",
+    "db:studio": "pnpm --filter @teamtrack/database studio",
+    "admin:create": "pnpm --filter @teamtrack/api admin:create",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "format": "prettier --write \"**/*.{ts,tsx,js,json,md}\""
+  },
+  "devDependencies": {
+    "@types/node": "^20.10.0",
+    "concurrently": "^8.2.2",
+    "prettier": "^3.1.0",
+    "typescript": "^5.3.3"
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=8.0.0"
+  }
+}
