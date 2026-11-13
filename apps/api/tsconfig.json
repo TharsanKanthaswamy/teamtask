@@ -21,7 +21,8 @@
     "paths": {
       "@/common/*": ["src/common/*"],
       "@/auth/*": ["src/auth/*"],
-      "@/database/*": ["src/database/*"]
+      "@/database/*": ["src/database/*"],
+      "@teamtrack/shared": ["../../packages/shared/dist/index"]
     }
   },
   "include": ["src/**/*"],
