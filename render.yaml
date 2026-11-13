@@ -4,7 +4,7 @@ services:
     runtime: node
     plan: free
     region: oregon
-    buildCommand: npm install -g pnpm@8 && pnpm install --no-frozen-lockfile --prod=false && pnpm --filter @teamtrack/database generate && pnpm --filter @teamtrack/api build
+    buildCommand: npm install -g pnpm@8 && pnpm install --no-frozen-lockfile --prod=false && pnpm --filter @teamtrack/shared build && pnpm --filter @teamtrack/database generate && pnpm --filter @teamtrack/api build
     startCommand: pnpm --filter @teamtrack/api start:prod
     envVars:
       - key: NODE_ENV
