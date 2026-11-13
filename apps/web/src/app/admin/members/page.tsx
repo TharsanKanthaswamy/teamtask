@@ -131,22 +131,22 @@ export default function AdminMembersPage() {
     <div className="relative min-h-screen">
       <div className="fixed inset-0 -z-10 gradient-mesh opacity-40" />
 
-      <div className="space-y-8 p-8">
+      <div className="space-y-6 sm:space-y-8 p-4 sm:p-6 lg:p-8">
         {/* Header */}
         <header className="space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <h1 className="display-text text-4xl font-semibold tracking-tight text-foreground">
+              <h1 className="display-text text-2xl sm:text-4xl font-semibold tracking-tight text-foreground">
                 Members Management
               </h1>
-              <p className="body-text text-base text-muted-foreground max-w-2xl mt-1">
+              <p className="body-text text-sm sm:text-base text-muted-foreground max-w-2xl mt-1">
                 Manage accounts, assign roles, and administer organization-wide access
               </p>
             </div>
             <div className="flex items-center gap-3">
               <Button
                 onClick={() => setIsAddOpen(true)}
-                className="button-press gap-2 shadow-sm font-medium"
+                className="button-press gap-2 shadow-sm font-medium w-full sm:w-auto"
               >
                 <Plus className="h-4 w-4" />
                 Add Member

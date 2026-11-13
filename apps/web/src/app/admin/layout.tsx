@@ -21,6 +21,10 @@ import {
   ChevronDown,
   CheckCircle2,
   ExternalLink,
+  Menu,
+  X,
+  PanelLeftClose,
+  PanelLeft,
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { ThemeToggle } from '@/components/theme-toggle';
@@ -31,12 +35,19 @@ import { Button } from '@/components/ui/button';
 export default function AdminLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [isQuickCreateOpen, setIsQuickCreateOpen] = useState(false);
   const [isMyProfileOpen, setIsMyProfileOpen] = useState(false);
 
   const userMenuRef = useRef<HTMLDivElement>(null);
   const quickCreateRef = useRef<HTMLDivElement>(null);
+
+  // Close mobile sidebar on route change
+  useEffect(() => {
+    setIsMobileOpen(false);
+  }, [pathname]);
 
   // Close dropdowns when clicking outside
   useEffect(() => {
@@ -82,55 +93,97 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div className="flex h-screen bg-background overflow-hidden relative">
+      {/* Mobile Drawer Backdrop */}
+      {isMobileOpen && (
+        <div
+          className="fixed inset-0 bg-background/80 backdrop-blur-sm z-40 md:hidden animate-fade-in"
+          onClick={() => setIsMobileOpen(false)}
+        />
+      )}
+
       {/* Sidebar */}
-      <aside className="w-64 border-r border-border bg-card flex flex-col justify-between shrink-0 z-30">
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 flex flex-col justify-between border-r border-border bg-card transition-all duration-300 ease-in-out md:static ${
+          isMobileOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full md:translate-x-0'
+        } ${isCollapsed ? 'md:w-20' : 'md:w-64'} w-72 shrink-0`}
+      >
         <div>
-          <div className="flex h-16 items-center justify-between border-b border-border px-6">
-            <Link href="/admin/dashboard" className="flex items-center gap-2.5 group">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/20 text-primary font-bold group-hover:scale-105 transition-transform">
+          {/* Sidebar Header */}
+          <div
+            className={`flex h-16 items-center border-b border-border px-4 ${
+              isCollapsed ? 'md:justify-center' : 'justify-between'
+            }`}
+          >
+            <Link
+              href="/admin/dashboard"
+              className={`items-center gap-2.5 group ${isCollapsed ? 'md:hidden flex' : 'flex'}`}
+            >
+              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/20 text-primary font-bold group-hover:scale-105 transition-transform shrink-0">
                 TT
               </div>
-              <h1 className="text-lg font-bold tracking-tight text-foreground">TeamTrack</h1>
+              <h1 className="text-lg font-bold tracking-tight text-foreground truncate">TeamTrack</h1>
+              <span className="rounded bg-primary/15 px-2 py-0.5 text-[11px] font-bold text-primary tracking-wide uppercase shrink-0">
+                Admin
+              </span>
             </Link>
-            <span className="rounded bg-primary/15 px-2 py-0.5 text-[11px] font-bold text-primary tracking-wide uppercase">
-              Admin
-            </span>
+
+            {/* Collapsed desktop logo */}
+            {isCollapsed && (
+              <Link
+                href="/admin/dashboard"
+                className="hidden md:flex items-center justify-center h-9 w-9 rounded-lg bg-primary/20 text-primary font-bold hover:scale-105 transition-transform"
+                title="TeamTrack Admin"
+              >
+                TT
+              </Link>
+            )}
+
+            {/* Close button for mobile drawer */}
+            <button
+              onClick={() => setIsMobileOpen(false)}
+              className="p-2 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground md:hidden transition-colors"
+              aria-label="Close sidebar"
+            >
+              <X size={18} />
+            </button>
           </div>
 
-          <nav className="flex flex-col gap-1.5 p-4">
-            <NavLink href="/admin/dashboard" icon={<LayoutDashboard size={18} />}>
+          <nav className="flex flex-col gap-1.5 p-3">
+            <NavLink href="/admin/dashboard" icon={<LayoutDashboard size={18} />} collapsed={isCollapsed}>
               Overview
             </NavLink>
-            <NavLink href="/admin/teams" icon={<Building2 size={18} />}>
+            <NavLink href="/admin/teams" icon={<Building2 size={18} />} collapsed={isCollapsed}>
               Teams
             </NavLink>
-            <NavLink href="/admin/projects" icon={<Folder size={18} />}>
+            <NavLink href="/admin/projects" icon={<Folder size={18} />} collapsed={isCollapsed}>
               Projects
             </NavLink>
-            <NavLink href="/admin/members" icon={<Users size={18} />}>
+            <NavLink href="/admin/members" icon={<Users size={18} />} collapsed={isCollapsed}>
               Members
             </NavLink>
-            <NavLink href="/admin/activity" icon={<Activity size={18} />}>
+            <NavLink href="/admin/activity" icon={<Activity size={18} />} collapsed={isCollapsed}>
               Activity
             </NavLink>
-            <NavLink href="/admin/settings" icon={<Settings size={18} />}>
+            <NavLink href="/admin/settings" icon={<Settings size={18} />} collapsed={isCollapsed}>
               Settings
             </NavLink>
           </nav>
         </div>
 
-        <div className="border-t border-border p-4 space-y-2">
+        <div className="border-t border-border p-3 space-y-2">
           {/* Quick Profile Summary in sidebar */}
           <button
             onClick={() => setIsMyProfileOpen(true)}
-            className="flex w-full items-center gap-3 rounded-lg p-2 text-left hover:bg-accent/60 transition-colors group"
-            title="Click to view my profile"
+            className={`flex w-full items-center rounded-lg p-2 text-left hover:bg-accent/60 transition-colors group ${
+              isCollapsed ? 'md:justify-center' : 'gap-3'
+            }`}
+            title={`Profile: ${userName} (${userEmail})`}
           >
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary font-bold text-xs border border-primary/20 group-hover:bg-primary group-hover:text-primary-foreground transition-colors shrink-0">
               {userName.slice(0, 2).toUpperCase()}
             </div>
-            <div className="min-w-0 flex-1">
+            <div className={`min-w-0 flex-1 ${isCollapsed ? 'md:hidden' : 'block'}`}>
               <div className="text-xs font-semibold text-foreground truncate group-hover:text-primary transition-colors">
                 {userName}
               </div>
@@ -142,18 +195,24 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
           <Link
             href="/workspace/projects"
-            className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+            className={`flex w-full items-center rounded-lg px-3 py-2 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground transition-colors ${
+              isCollapsed ? 'md:justify-center md:px-0' : 'gap-2.5'
+            }`}
+            title="Switch to Workspace"
           >
-            <Layers size={15} />
-            <span>Switch to Workspace</span>
+            <Layers size={16} className="shrink-0" />
+            <span className={isCollapsed ? 'md:hidden truncate' : 'truncate'}>Switch to Workspace</span>
           </Link>
 
           <button
             onClick={handleSignOut}
-            className="button-press flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors"
+            className={`button-press flex w-full items-center rounded-lg px-3 py-2 text-xs font-medium text-destructive hover:bg-destructive/10 transition-colors ${
+              isCollapsed ? 'md:justify-center md:px-0' : 'gap-2.5'
+            }`}
+            title="Sign out"
           >
-            <LogOut size={15} />
-            <span>Sign out</span>
+            <LogOut size={16} className="shrink-0" />
+            <span className={isCollapsed ? 'md:hidden truncate' : 'truncate'}>Sign out</span>
           </button>
         </div>
       </aside>
@@ -161,12 +220,31 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       {/* Main Column */}
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Top Navigation Bar */}
-        <header className="h-16 border-b border-border bg-card/80 backdrop-blur-md px-6 flex items-center justify-between shrink-0 z-20 sticky top-0">
-          {/* Left: Breadcrumbs & Page title */}
-          <div className="flex items-center gap-3">
-            <span className="text-xs font-medium text-muted-foreground">Admin</span>
-            <span className="text-muted-foreground/40 text-xs">/</span>
-            <span className="text-sm font-semibold text-foreground">{getBreadcrumbTitle()}</span>
+        <header className="h-16 border-b border-border bg-card/80 backdrop-blur-md px-4 sm:px-6 flex items-center justify-between shrink-0 z-20 sticky top-0">
+          {/* Left: Mobile Hamburger, Desktop Collapse Toggle, Breadcrumbs */}
+          <div className="flex items-center gap-2 sm:gap-3">
+            {/* Mobile Hamburger Menu Button */}
+            <button
+              onClick={() => setIsMobileOpen(true)}
+              className="p-2 -ml-2 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground md:hidden transition-colors"
+              aria-label="Open sidebar"
+            >
+              <Menu size={20} />
+            </button>
+
+            {/* Desktop Collapse / Expand Toggle Button */}
+            <button
+              onClick={() => setIsCollapsed(!isCollapsed)}
+              className="hidden md:flex p-2 -ml-2 rounded-lg text-muted-foreground hover:bg-accent hover:text-foreground transition-colors"
+              title={isCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+              aria-label="Toggle sidebar"
+            >
+              {isCollapsed ? <PanelLeft size={18} /> : <PanelLeftClose size={18} />}
+            </button>
+
+            <span className="text-xs font-medium text-muted-foreground hidden sm:inline">Admin</span>
+            <span className="text-muted-foreground/40 text-xs hidden sm:inline">/</span>
+            <span className="text-sm font-semibold text-foreground truncate">{getBreadcrumbTitle()}</span>
           </div>
 
           {/* Right: Actions, Notifications, Theme, Profile */}
@@ -340,10 +418,12 @@ function NavLink({
   href,
   icon,
   children,
+  collapsed,
 }: {
   href: string;
   icon: ReactNode;
   children: ReactNode;
+  collapsed?: boolean;
 }) {
   const pathname = usePathname();
   const isActive =
@@ -352,14 +432,17 @@ function NavLink({
   return (
     <Link
       href={href}
-      className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors active:scale-[0.98] ${
+      title={typeof children === 'string' ? children : undefined}
+      className={`flex items-center rounded-lg py-2.5 text-sm font-medium transition-all active:scale-[0.98] ${
+        collapsed ? 'md:justify-center md:px-2 px-3 gap-3' : 'gap-3 px-3'
+      } ${
         isActive
           ? 'bg-primary/15 text-primary font-semibold shadow-sm'
           : 'text-muted-foreground hover:bg-accent hover:text-foreground'
       }`}
     >
-      {icon}
-      <span>{children}</span>
+      <span className="shrink-0">{icon}</span>
+      <span className={collapsed ? 'md:hidden truncate' : 'truncate'}>{children}</span>
     </Link>
   );
 }

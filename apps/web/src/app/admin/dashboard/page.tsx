@@ -50,11 +50,11 @@ export default function AdminDashboardPage() {
     <div className="relative min-h-screen">
       <div className="fixed inset-0 -z-10 gradient-mesh opacity-40" />
 
-      <div className="space-y-8 p-8 max-w-7xl">
+      <div className="space-y-6 sm:space-y-8 p-4 sm:p-6 lg:p-8 max-w-7xl">
         {/* Header with Quick Actions */}
         <header className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
           <div>
-            <h1 className="display-text text-4xl font-semibold tracking-tight text-foreground">
+            <h1 className="display-text text-2xl sm:text-4xl font-semibold tracking-tight text-foreground">
               Platform Overview
             </h1>
             <p className="body-text text-base text-muted-foreground mt-1 max-w-2xl">
